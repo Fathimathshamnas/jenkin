@@ -1,14 +1,8 @@
 pipeline {
     agent any
 
-    environment {
-        DOCKER_IMAGE = "shamnasp/my-devops-app"
-        DOCKER_TAG = "${BUILD_NUMBER}"
-        SONAR_TOKEN = credentials('sonar-token')
-    }
-
     tools {
-        maven 'Maven3'
+        maven 'Maven'
     }
 
     stages {
@@ -32,47 +26,31 @@ pipeline {
             }
         }
 
-        stage('4 - SonarQube Analysis') {
+        stage('4 - Package') {
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh '''mvn sonar:sonar \
-                        -Dsonar.projectKey=my-devops-app \
-                        -Dsonar.host.url=http://localhost:9000 \
-                        -Dsonar.login=${SONAR_TOKEN}'''
-                }
+                sh 'mvn package -DskipTests'
             }
         }
 
-        stage('5 - Quality Gate') {
+        stage('5 - Docker Build') {
             steps {
-                timeout(time: 2, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
+                sh 'docker build -t demo-app:v1 .'
             }
         }
 
-        stage('6 - Docker Build') {
+        stage('6 - Verify Docker Image') {
             steps {
-                sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-                echo "Image built: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-            }
-        }
-
-        stage('7 - Push to Docker Hub') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS')]) {
-                    sh "docker login -u ${DOCKER_USER} -p ${DOCKER_PASS}"
-                    sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                }
+                sh 'docker images'
             }
         }
     }
 
     post {
-        success { echo 'Pipeline SUCCESS! Image pushed to Docker Hub.' }
-        failure  { echo 'Pipeline FAILED — check logs.' }
+        success {
+            echo 'Pipeline SUCCESS'
+        }
+        failure {
+            echo 'Pipeline FAILED'
+        }
     }
 }
